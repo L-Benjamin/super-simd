@@ -65,7 +65,7 @@ test tests::super_simd ... bench:           9 ns/iter (+/- 0)
 
 The `scalar` benchmark performs the additions one after the other and place the result in an array. The `super_simd` benchmark performs the additions the "super-simd way"  (see section "Design").
 
-These numbers give a 20/9=2.22 speedup gained by using the library over adding `u8s` the "naive" way.
+These numbers give a 19/9=2.11 speedup gained by using the library over adding `u8s` the "naive" way.
 
 ## Design
 

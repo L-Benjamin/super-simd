@@ -142,8 +142,8 @@ impl Debug for u8x512 {
 /*
  * Implementation of &u8x512 + &u8x512 -> u8x512. It's an implementation of the binary long
  * addition algorithm, done 512 times in parallel. Considering a simd operation as a
- * single operation, the complexity is equal to 7x8 = 56 operations, giving a theoretical
- * speedup of 512/56 = 9.14.
+ * single operation, the complexity is equal to 2+7x6+2 = 46 operations, giving a theoretical
+ * speedup of 512/46 = 11.13
  */
 impl Add for &u8x512 {
     type Output = u8x512;
@@ -151,9 +151,11 @@ impl Add for &u8x512 {
     fn add(self, rhs: &u8x512) -> u8x512 {
         unsafe {
             let mut res: [MaybeUninit<u64x8>; 8] = MaybeUninit::uninit().assume_init();
-            let mut carry = u64x8::ZERO;
 
-            for i in 0..8 {
+            res[0] = MaybeUninit::new(simd_xor(self.rows[0], rhs.rows[0]));
+            let mut carry = simd_and(self.rows[0], rhs.rows[0]);
+
+            for i in 1..7 {
                 res[i] = MaybeUninit::new(simd_xor(simd_xor(
                     self.rows[i],
                     rhs.rows[i]),
@@ -166,6 +168,12 @@ impl Add for &u8x512 {
                     simd_and(rhs.rows[i], carry),
                 );
             }
+
+            res[7] = MaybeUninit::new(simd_xor(simd_xor(
+                self.rows[7],
+                rhs.rows[7]),
+                carry,
+            ));
 
             u8x512 {rows: transmute(res)}
         }
@@ -190,24 +198,31 @@ impl Add for u8x512 {
 impl AddAssign<&u8x512> for u8x512 {
     fn add_assign(&mut self, rhs: &u8x512) {
         unsafe {
-            let mut carry = u64x8::ZERO;
             let mut tmp;
+            let mut carry = simd_and(self.rows[0], rhs.rows[0]);
+            self.rows[0] = simd_xor(self.rows[0], rhs.rows[0]);
 
-            for i in 0..8 {
-                tmp = simd_or(simd_or(
-                    simd_and(self.rows[i], rhs.rows[i]),
-                    simd_and(self.rows[i], carry)),
-                    simd_and(rhs.rows[i], carry),
-                );
-
-                self.rows[i] = simd_xor(simd_xor(
+            for i in 1..7 {
+                tmp = simd_xor(simd_xor(
                     self.rows[i],
                     rhs.rows[i]),
                     carry,
                 );
 
-                carry = tmp;
+                carry = simd_or(simd_or(
+                    simd_and(self.rows[i], rhs.rows[i]),
+                    simd_and(self.rows[i], carry)),
+                    simd_and(rhs.rows[i], carry),
+                );
+
+                self.rows[i] = tmp;
             }
+
+            self.rows[7] = simd_xor(simd_xor(
+                self.rows[7],
+                rhs.rows[7]),
+                carry,
+            );
         }
     }
 }
